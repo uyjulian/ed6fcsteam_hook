@@ -6,8 +6,21 @@
 
 #include "ed6fc.h"
 #include "ml.cpp"
+#if 0
 #include "DWriteRender.h"
+#else
+#include <ft2build.h>
+#include <freetype.h>
+#include <ftglyph.h>
+#include <ftimage.h>
+#include <ftbitmap.h>
+#include <ftsynth.h>
+#define FT_INT(_int, _float) ((_int << 6) | (_float))
+FT_Library  FTLibrary;
+FT_Face     Face;
+#endif
 #include <stdio.h>
+#include <functional>
 
 #pragma comment(lib, "dwrite.lib")
 #pragma comment(lib, "d2d1.lib")
@@ -18,7 +31,7 @@ BOOL SleepFix;
 PED6_FC_FONT_RENDER GameFontRender;
 API_POINTER(CreateFileA) StubCreateFileA;
 
-BYTE FontSizeTable[] =
+static BYTE FontSizeTable[] =
 {
     0x08, 0x0c, 0x10, 0x14,
     0x18, 0x20, 0x12, 0x1a,
@@ -28,17 +41,191 @@ BYTE FontSizeTable[] =
     0x80, 0x90, 0xa0, 0xc0,
 };
 
-USHORT FontColorTable[] =
+static USHORT FontColorTable[] =
 {
     0x0fff, 0x0fc7, 0x0f52, 0x08cf, 0x0fb4, 0x08fa, 0x0888, 0x0fee, 0x0853, 0x0333,
     0x0ca8, 0x0fdb, 0x0ace, 0x0cff, 0x056b, 0x0632, 0x0135, 0x0357, 0x0bbb,
 };
 
+static BYTE FontLumaTable[] =
+{
+    0x00, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
+    0x01, 0x01, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
+    0x02, 0x02, 0x02, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03,
+    0x03, 0x03, 0x03, 0x03, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
+    0x04, 0x04, 0x04, 0x04, 0x04, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05,
+    0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06,
+    0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07,
+    0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09,
+    0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A,
+    0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B,
+    0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0C, 0x0C, 0x0C, 0x0C,
+    0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0D, 0x0D, 0x0D,
+    0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0E, 0x0E,
+    0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0F,
+    0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F,
+};
+
+inline void SearchAllPatterns(const ml::String& Pattern, PVOID Begin, LONG_PTR Length, std::function<void(const ml::GrowableArray<PVOID>& references)> callback)
+{
+    GrowableArray<SEARCH_PATTERN_DATA>  Patterns;
+    GrowableArray<PVOID> references;
+    GrowableArray<ml::String::ByteArray *>  BytesArray;
+    ml::String::ByteArray*                  CurrentBytes;
+    SEARCH_PATTERN_DATA                 CurrentPattern;
+    ULONG_PTR                           GapBytes;
+
+    SCOPE_EXIT
+    {
+        for (auto &p : BytesArray)
+            delete p;
+    }
+    SCOPE_EXIT_END;
+
+    CurrentBytes = nullptr;
+    GapBytes = 0;
+    ZeroMemory(&CurrentPattern, sizeof(CurrentPattern));
+
+    for (ml::String &p : Pattern.Split(' '))
+    {
+        if (!p)
+            continue;
+
+        if (p.GetCount() != 2)
+            return;
+
+        if (p[0] == '?' && p[1] == '?')
+        {
+            ++GapBytes;
+        }
+        else
+        {
+            ULONG Hex;
+
+            if (GapBytes != 0)
+            {
+                CurrentPattern.Pattern = CurrentBytes->GetData();
+                CurrentPattern.Size = CurrentBytes->GetSize();
+                CurrentPattern.HeadOffsetToNext = CurrentPattern.Size + GapBytes;
+                Patterns.Add(CurrentPattern);
+
+                ZeroMemory(&CurrentPattern, sizeof(CurrentPattern));
+
+                GapBytes = 0;
+                BytesArray.Add(CurrentBytes);
+                CurrentBytes = nullptr;
+            }
+
+            if (CurrentBytes == nullptr)
+                CurrentBytes = new ml::String::ByteArray;
+
+            Hex = p.ToHex();
+            CurrentBytes->Add(Hex);
+        }
+    }
+
+    if (CurrentBytes != nullptr)
+    {
+        BytesArray.Add(CurrentBytes);
+
+        CurrentPattern.Pattern = CurrentBytes->GetData();
+        CurrentPattern.Size = CurrentBytes->GetSize();
+        Patterns.Add(CurrentPattern);
+    }
+
+    for (PVOID reference = Begin; (ULONG_PTR)reference < ((ULONG_PTR)Begin + Length);)
+    {
+        reference = SearchPatternSafe(Patterns.GetData(), Patterns.GetSize(), reference, Length);
+        if (!reference)
+            break;
+        references.Add(reference);
+        reference = (PVOID)((ULONG_PTR)reference + CurrentPattern.Size);
+    }
+
+    callback(references);
+
+}
+
+#if 0
 DWriteRender *DWriteMBCSRenders[countof(FontSizeTable)];
 DWriteRender *DWriteAnsiRenders[countof(FontSizeTable)];
 DWriteRender *DWriteSJISRenders[countof(FontSizeTable)];
+#endif
 
 VOID (NTAPI *StubGetGlyphsBitmap)(PCSTR Text, PVOID Buffer, ULONG Stride, ULONG ColorIndex);
+
+NTSTATUS GetGlyphBitmap(LONG_PTR FontSize, WCHAR Chr, PVOID& Buffer, ULONG ColorIndex, ULONG Stride)
+{
+    PBYTE           Outline, Source;
+    ULONG_PTR       Color;
+    FT_Glyph        glyph;
+    FT_BitmapGlyph  bitmap;
+
+    ULONG strenth = FT_INT(1, 0);
+
+    Color = FontColorTable[ColorIndex];
+
+    FT_Load_Glyph(Face, FT_Get_Char_Index(Face, Chr), FT_LOAD_DEFAULT | FT_LOAD_NO_BITMAP | FT_LOAD_FORCE_AUTOHINT | FT_LOAD_RENDER);
+    //FT_Bitmap_Embolden(FTLibrary, &Face->glyph->bitmap, 0, strenth);
+    FT_Render_Glyph(Face->glyph, FT_RENDER_MODE_NORMAL);
+    FT_Get_Glyph(Face->glyph, &glyph);
+    FT_Glyph_To_Bitmap(&glyph, FT_RENDER_MODE_NORMAL, nullptr, TRUE);
+
+    bitmap = (FT_BitmapGlyph)glyph;
+    Source = (PBYTE)bitmap->bitmap.buffer;
+
+    if (Source != nullptr)
+    {
+        BYTE LocalOutline[0x2000];
+        ZeroMemory(LocalOutline, FontSize * FontSize);
+
+        Outline = LocalOutline + bitmap->left + (FontSize - ML_MIN(FontSize, bitmap->top + 3)) * FontSize;
+
+        for (ULONG_PTR Height = bitmap->bitmap.rows; Height; --Height)
+        {
+            PBYTE out = Outline;
+
+            for (ULONG_PTR Width = bitmap->bitmap.width; Width; --Width)
+            {
+                *out++ = FontLumaTable[*Source++];
+            }
+
+            Outline += FontSize;
+        }
+
+        PBYTE Surface = (PBYTE)Buffer;
+
+        Source = LocalOutline;
+
+        for (ULONG_PTR Height = FontSize; Height; --Height)
+        {
+            PUSHORT out = (PUSHORT)Surface;
+
+            for (ULONG_PTR Width = FontSize; Width; --Width)
+            {
+                *out++ = *Source != 0 ? ((*Source << 0xC) | Color) : 0;
+                ++Source;
+            }
+
+            Surface += Stride;
+        }
+
+        //Buffer = PtrAdd(Buffer, (bitmap->left + bitmap->bitmap.pitch + bitmap->left) * sizeof(USHORT));
+        Buffer = PtrAdd(Buffer, (Chr >= 0x80 ? FontSize : FontSize / 2) * sizeof(USHORT));
+    }
+    else
+    {
+        //Buffer = PtrAdd(Buffer, Face->glyph->metrics.horiAdvance * 2);
+        Buffer = PtrAdd(Buffer, Chr == ' ' ? FontSize : FontSize * 2);
+    }
+
+    FT_Done_Glyph(glyph);
+
+    return STATUS_SUCCESS;
+
+    //return Source != nullptr ? STATUS_SUCCESS : STATUS_UNSUCCESSFUL;
+}
 
 BOOL TranslateChar(PCSTR Text, USHORT& translated)
 {
@@ -162,18 +349,34 @@ BOOL TranslateChar(PCSTR Text, USHORT& translated)
 
 PVOID NTAPI GetGlyphsBitmap(PCSTR Text, PVOID Buffer, ULONG Stride, ULONG ColorIndex)
 {
+#if 0
     DWriteRender    *mbcsRender, *ansiRender, *sjisRender;
+#endif
     ULONG_PTR       fontSize, fontIndex, color, width, runeWidth;
+    ULONG_PTR Encoding = CP_SHIFTJIS;
 
     fontIndex   = GameFontRender->FontSizeIndex;
     fontSize    = FontSizeTable[fontIndex];
+#if 0
     mbcsRender  = DWriteMBCSRenders[fontIndex];
     ansiRender  = DWriteAnsiRenders[fontIndex];
     sjisRender  = DWriteSJISRenders[fontIndex];
+#endif
     color       = FontColorTable[ColorIndex];
 
-    for (auto &chr : String::Decode(Text, StrLengthA(Text), CP_SHIFTJIS))
+    FT_Set_Pixel_Sizes(Face, fontSize, fontSize);
+
+    int nLen = MultiByteToWideChar(Encoding, 0, Text, -1, NULL, NULL);
+    LPWSTR wText = new WCHAR[nLen];
+    MultiByteToWideChar(Encoding, 0, Text, -1, wText, nLen);
+
+#if DBG
+        fprintf("Printing text: %s\n", Text);
+#endif
+
+    for (WCHAR* chr = wText; *chr; ++chr)
     {
+#if 0
         USHORT translated;
         CHAR ansi = Text[0];
 
@@ -205,7 +408,24 @@ PVOID NTAPI GetGlyphsBitmap(PCSTR Text, PVOID Buffer, ULONG Stride, ULONG ColorI
         }
 
         Buffer = PtrAdd(Buffer, (LONG_PTR)width * 2);
+#else
+        if (NT_FAILED(GetGlyphBitmap(fontSize, *chr, Buffer, ColorIndex, Stride)))
+        {
+#if 0
+            WCHAR wcs[] = { *chr, 0 };
+            LPSTR nText = new CHAR[2];
+            nText[1] = 0;
+            WideCharToMultiByte(Encoding, 0, wcs, 2, nText, 2, NULL, NULL);
+            StubGetGlyphsBitmap(nText, Buffer, Stride, ColorIndex);
+            delete nText;
+#endif
+            Buffer = PtrAdd(Buffer, (LONG_PTR)fontSize * 2);
+        }
+
+#endif
     }
+
+    delete wText;
 
     return Buffer;
 }
@@ -365,6 +585,7 @@ PVOID FindAndAdvance(ULONG_PTR Advance, ARGS... args)
     return p == nullptr ? IMAGE_INVALID_VA : PtrAdd(p, Advance);
 }
 
+#if 0
 NTSTATUS InitializeDWrite()
 {
     NTSTATUS hr;
@@ -411,6 +632,7 @@ NTSTATUS InitializeDWrite()
 
     return hr;
 }
+#endif
 
 BOOL UnInitialize(PVOID BaseAddress)
 {
@@ -518,7 +740,42 @@ BOOL Initialize(PVOID BaseAddress)
 
     Rtl::SetExeDirectoryAsCurrent();
 
+#if 0
     Success = NT_SUCCESS(InitializeDWrite());
+#else
+    Success = FALSE;
+    FaceBuffer = nullptr;
+
+    LOOP_ONCE
+    {
+        NtFileMemory file;
+
+        if (FT_Init_FreeType(&FTLibrary) != FT_Err_Ok)
+            break;
+
+        if (NT_FAILED(file.Open(L"user.ttf")))
+            break;
+
+        FaceBuffer = AllocateMemoryP(file.GetSize32());
+        if (FaceBuffer == nullptr)
+            break;
+
+        CopyMemory(FaceBuffer, file.GetBuffer(), file.GetSize32());
+
+        if (FT_New_Memory_Face(FTLibrary, (PBYTE)FaceBuffer, file.GetSize32(), 0, &Face) != FT_Err_Ok)
+            break;
+
+        FT_Select_Charmap(Face, FT_ENCODING_SJIS);
+
+        Success = TRUE;
+    }
+
+    if (Success == FALSE)
+    {
+        FreeMemoryP(FaceBuffer);
+        // return TRUE;
+    }
+#endif
     PatchExeText(BaseAddress);
 
     //DWriteRenders[9]->DrawRune(L'P', FontColorTable[0], 0, 0, 0), Ps::ExitProcess(0);
@@ -538,8 +795,6 @@ BOOL Initialize(PVOID BaseAddress)
 
     ExeModule = FindLdrModuleByHandle(nullptr);
 
-    //TODO: Reimplement SearchAllPatterns
-#if 0
     // char width
     SearchAllPatterns(
         L"76 ?? ?? 80 72 ?? ?? A0 72 ?? ?? E0 73 ??",
@@ -657,7 +912,6 @@ BOOL Initialize(PVOID BaseAddress)
             }
         }
     );
-#endif
 
     static FLOAT DefaultPlaceNameTextDeltaX = 0;
 
@@ -710,22 +964,52 @@ BOOL Initialize(PVOID BaseAddress)
         // 80 ?? 80 72 ?? 80 ?? A0 72 ?? 80 ?? E0 72 ??
         // 3C 80 72 ?? 3C A0 72 ?? 3C E0 72 ??
         // 3C 80 72 ?? 3C A0 72 ?? 3C E0 73 ??
-        //MemoryPatchVa(0xEBull, 1, 0x46A2E2),
-        //MemoryPatchVa(0xEBull, 1, 0x479C27),
-        //MemoryPatchVa(0xEBull, 1, 0x47B8A1),
-        //MemoryPatchVa(0xEBull, 1, 0x48540B),
-        //MemoryPatchVa(0xEBull, 1, 0x485941),
-        //MemoryPatchVa(0xEBull, 1, 0x4888E5),
-        //MemoryPatchVa(0x00ull, 1, 0x488A6D),
-        //MemoryPatchVa(0xEBull, 1, 0x488E37),
-        //MemoryPatchVa(0xEBull, 1, 0x4B8FE1),
-        //MemoryPatchVa(0xEBull, 1, 0x4B9044),
-        //MemoryPatchVa(0xEBull, 1, 0x4B90C5),
-        //MemoryPatchVa(0xEBull, 1, 0x4B915D),
-        //MemoryPatchVa(0xEBull, 1, 0x4B930C),
-        //MemoryPatchVa(0xEBull, 1, 0x4B937C),
-        //MemoryPatchVa(0xEBull, 1, 0x4B942B),
-        //MemoryPatchVa(0xEBull, 1, 0x4DB6CD),
+#define X_FUNC_BASE 0x46A2E2
+        //MemoryPatchVa(0xEBull, 1, X_FUNC_BASE + 0x2B2),
+#undef X_FUNC_BASE
+#define X_FUNC_BASE 0x479B60
+        //MemoryPatchVa(0xEBull, 1, X_FUNC_BASE + 0xC7),
+#undef X_FUNC_BASE
+#define X_FUNC_BASE 0x47B8A1
+        //MemoryPatchVa(0xEBull, 1, X_FUNC_BASE + 0xB1),
+#undef X_FUNC_BASE
+#define X_FUNC_BASE 0x4853E0
+        //MemoryPatchVa(0xEBull, 1, X_FUNC_BASE + 0x2B),
+#undef X_FUNC_BASE
+#define X_FUNC_BASE 0x4858D0
+        //MemoryPatchVa(0xEBull, 1, X_FUNC_BASE + 0x71),
+#undef X_FUNC_BASE
+#define X_FUNC_BASE 0x4882C0
+        //MemoryPatchVa(0xEBull, 1, X_FUNC_BASE + 0x625),
+#undef X_FUNC_BASE
+#define X_FUNC_BASE 0x488A50
+        //MemoryPatchVa(0x00ull, 1, X_FUNC_BASE + 0x1C + 0x1),
+#undef X_FUNC_BASE
+#define X_FUNC_BASE 0x488E37
+        //MemoryPatchVa(0xEBull, 1, X_FUNC_BASE + 0x247),
+#undef X_FUNC_BASE
+#define X_FUNC_BASE 0x4B8FC0
+        //MemoryPatchVa(0xEBull, 1, X_FUNC_BASE + 0x21),
+#undef X_FUNC_BASE
+#define X_FUNC_BASE 0x4B9030
+        //MemoryPatchVa(0xEBull, 1, X_FUNC_BASE + 0x14),
+#undef X_FUNC_BASE
+#define X_FUNC_BASE 0x4B9030
+        //MemoryPatchVa(0xEBull, 1, X_FUNC_BASE + 0x15),
+#undef X_FUNC_BASE
+#define X_FUNC_BASE 0x4B9140
+        //MemoryPatchVa(0xEBull, 1, X_FUNC_BASE + 0x1D),
+#undef X_FUNC_BASE
+#define X_FUNC_BASE 0x4B92D0
+        //MemoryPatchVa(0xEBull, 1, X_FUNC_BASE + 0x3C),
+#undef X_FUNC_BASE
+#define X_FUNC_BASE 0x4B9340
+        //MemoryPatchVa(0xEBull, 1, X_FUNC_BASE + 0x3C),
+        //MemoryPatchVa(0xEBull, 1, X_FUNC_BASE + 0xEB),
+#undef X_FUNC_BASE
+#define X_FUNC_BASE 0x4DB670
+        //MemoryPatchVa(0xEBull, 1, X_FUNC_BASE + 0x5D),
+#undef X_FUNC_BASE
 
         /************************************************************************
          calc ansi char width
@@ -742,11 +1026,13 @@ BOOL Initialize(PVOID BaseAddress)
 
         76 ?? ?? 80 72 ?? ?? A0 72 ?? ?? E0 73 ??
         ************************************************************************/
-        // MemoryPatchVa(0xCull, 1, 0x4B8FDA),
-        // MemoryPatchVa(0xCull, 1, 0x4B792D),
-        // MemoryPatchVa(0xCull, 1, 0x4B79AE),
-        // MemoryPatchVa(0xCull, 1, 0x4B7A46),
-        // MemoryPatchVa(0xCull, 1, 0x4B7D14),
+#define X_FUNC_BASE 0x4B8FC0
+        // MemoryPatchVa(0xCull, 1, X_FUNC_BASE + 0x19 + 0x1),
+#undef X_FUNC_BASE
+        // MemoryPatchVa(0xCull, 1, X_FUNC_BASE + 0x 0x4B792D), //nope
+        // MemoryPatchVa(0xCull, 1, X_FUNC_BASE + 0x 0x4B79AE),
+        // MemoryPatchVa(0xCull, 1, X_FUNC_BASE + 0x 0x4B7A46),
+        // MemoryPatchVa(0xCull, 1, X_FUNC_BASE + 0x 0x4B7D14),
 
         // 物品已有个数窗口位置
 #define X_FUNC_BASE 0x499280
