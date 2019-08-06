@@ -4898,7 +4898,7 @@ ULONG_PTR PrintConsole(PCWSTR Format, ...)
     HANDLE      StdOutput;
 
     va_start(Args, Format);
-    Length = _vsnwprintf(Buffer, countof(Buffer) - 1, Format, Args);
+    Length = vswprintf(Buffer, countof(Buffer) - 1, Format, Args);
     if (Length == -1)
         return Length;
 
@@ -7751,7 +7751,7 @@ Print(
     va_list Arg;
 
     va_start(Arg, Format);
-    //Length = _vsnwprintf(Buffer, countof(Buffer) - 1, Format, Arg);
+    //Length = vswprintf(Buffer, countof(Buffer) - 1, Format, Arg);
     Length = FormatStringvnW(Buffer, countof(Buffer) - 1, Format, Arg);
     if (Length == -1)
         return STATUS_BUFFER_TOO_SMALL;

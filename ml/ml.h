@@ -19461,7 +19461,7 @@ Bool IsShiftJISString(PCChar pString, SizeT Length);
 
 inline int GetFormatedSize(PCWSTR Format, ...)
 {
-    return _vscwprintf(Format, (va_list)((PVOID *)&Format + 1));
+    return vwprintf(Format, (va_list)((PVOID *)&Format + 1));
 }
 
 Int FormatStringA  (PChar  pszBuffer, PCChar  pszFormat, ...);
@@ -28617,14 +28617,14 @@ protected:
 
     LARGE_LENGTH_TYPE FormatCountV(STRING_CONST_POINTER_TYPE Format, va_list Arguments)
     {
-        return _vscwprintf(Format, Arguments);
+        return vwprintf(Format, Arguments);
     }
 
     LARGE_LENGTH_TYPE FormatV(STRING_CONST_POINTER_TYPE Format, va_list Arguments)
     {
         LARGE_LENGTH_TYPE Count;
 
-        Count = _vsnwprintf(GetBuffer(), (size_t)LengthToCount(GetMaxLength()), Format, Arguments);
+        Count = vswprintf(GetBuffer(), (size_t)LengthToCount(GetMaxLength()), Format, Arguments);
         this->String.Length = (STRING_LENGTH_TYPE)CountToLength(Count);
 
         return Count;

@@ -7,6 +7,7 @@
 #include "ed6fc.h"
 #include "ml.cpp"
 #include "DWriteRender.h"
+#include <stdio.h>
 
 #pragma comment(lib, "dwrite.lib")
 #pragma comment(lib, "d2d1.lib")
@@ -171,7 +172,7 @@ PVOID NTAPI GetGlyphsBitmap(PCSTR Text, PVOID Buffer, ULONG Stride, ULONG ColorI
     sjisRender  = DWriteSJISRenders[fontIndex];
     color       = FontColorTable[ColorIndex];
 
-    for (auto &chr : String::Decode(Text, StrLengthA(Text), CP_GBK))
+    for (auto &chr : String::Decode(Text, StrLengthA(Text), CP_SHIFTJIS))
     {
         USHORT translated;
         CHAR ansi = Text[0];
@@ -262,9 +263,8 @@ BOOL CDECL LoadFileFromDat(PVOID buffer, ULONG datIndex, ULONG datOffset, ULONG 
     if (NT_SUCCESS(dat.Open(path + String::Format(L"DAT\\ED6_DT%02X\\%.*S", datIndex, sizeof(entry->FileName), entry->FileName))))
     {
 #if DBG
-        PrintConsoleW(L"%S\n", entry->FileName);
+        fprintf("Filesystem loading: %s\n", entry->FileName);
 #endif
-
         *(PULONG)PtrAdd(buffer, 0) = fileSize;
         *(PULONG)PtrAdd(buffer, 4) = RAW_FILE_MAGIC;
         *(PULONG)PtrAdd(buffer, 8) = dat.GetSize32();
@@ -475,7 +475,7 @@ NTSTATUS SearchFunctions(PED6_FC_HOOK_FUNCTIONS functions)
         }
 
 #if DBG
-        PrintConsole(L"%p\n", *hooks[i].Address);
+        fprintf(stderr, "Hook pointer %p\n", *hooks[i].Address);
 #endif
     }
 
@@ -494,8 +494,10 @@ BOOL Initialize(PVOID BaseAddress)
 
     LdrDisableThreadCalloutsForDll(BaseAddress);
 
-    if (ImageNtHeaders(Ps::CurrentPeb()->ImageBaseAddress)->FileHeader.TimeDateStamp != 0x590BDEA4)
+    if (ImageNtHeaders(Ps::CurrentPeb()->ImageBaseAddress)->FileHeader.TimeDateStamp != 0x59A37AD3) {
+        fprintf(stderr, "Incompatible timedatestamp 0x%x\n", ImageNtHeaders(Ps::CurrentPeb()->ImageBaseAddress)->FileHeader.TimeDateStamp);
         return TRUE;
+    }
 
     ml::MlInitialize();
 
@@ -527,7 +529,12 @@ BOOL Initialize(PVOID BaseAddress)
         Success = GameFontRender != nullptr;
     }
 
-    FAIL_RETURN(SearchFunctions(&Functions));
+    //FAIL_RETURN(SearchFunctions(&Functions));
+    Functions.GetGlyphsBitmap = GET_GLYPHS_BITMAP_VA;
+    Functions.DrawTalkText = DRAW_TALK_TEXT_VA;
+    Functions.DrawDialogText = DRAW_DIALOG_TEXT_VA;
+    Functions.LoadFileFromDAT = LOAD_FILE_FROM_DAT_VA;
+    Functions.DecompressData = DECOMPRESS_DATA_VA;
 
     ExeModule = FindLdrModuleByHandle(nullptr);
 
@@ -742,26 +749,39 @@ BOOL Initialize(PVOID BaseAddress)
         // MemoryPatchVa(0xCull, 1, 0x4B7D14),
 
         // 物品已有个数窗口位置
+#define X_FUNC_BASE 0x499280
         //CWindow::CWindow(104, 14, ...)         // 4743A0
-        MemoryPatchVa(0x104ull, 4, 0x49345F),  // x
-        MemoryPatchVa(0x14ull,  4, 0x493473),  // width
-        MemoryPatchVa(0x104ull, 4, 0x49689C),  // x
-        MemoryPatchVa(0x14ull,  4, 0x4968B0),  // width
+        MemoryPatchVa(0x104ull, 4, X_FUNC_BASE + 0x10B + 0x4),  // x
+        MemoryPatchVa(0x14ull,  4, X_FUNC_BASE + 0x11F + 0x4),  // width
+#undef X_FUNC_BASE
+#define X_FUNC_BASE 0x49C790
+        MemoryPatchVa(0x104ull, 4, X_FUNC_BASE + 0x28 + 0x4),  // x
+        MemoryPatchVa(0x14ull,  4, X_FUNC_BASE + 0x3C + 0x4),  // width
+#undef X_FUNC_BASE
 
         // 战斗状态
-        MemoryPatchVa(0xC98B0000003Eull,  6, 0x43AEA9),  // hp fixed x
+#define X_FUNC_BASE 0x43AF10
+        MemoryPatchVa(0xC98B0000003Eull,  6, X_FUNC_BASE + 0x128 + 0x1),  // hp fixed x
+#undef X_FUNC_BASE
 
         // char type switch table
-        MemoryPatchVa(0x0404ull,    2, 0x48102E),
+//referenced by 0x486DF0+19
+        MemoryPatchVa(0x0404ull,    2, 0x486EBC),
 
         // jp font size limit
-        MemoryPatchVa(0xEBull,      1, 0x4D6FA4),
+#define X_FUNC_BASE 0x4DD9B0
+        MemoryPatchVa(0xEBull,      1, X_FUNC_BASE + 0x2A4),
+#undef X_FUNC_BASE
 
         // HP EP font size
-        MemoryPatchVa(0x02ull,      1, 0x47223B),
+#define X_FUNC_BASE 0x4773A0
+        MemoryPatchVa(0x02ull,      1, X_FUNC_BASE + 0x72A + 0x1),
+#undef X_FUNC_BASE
 
         // place name text X delta
-        MemoryPatchVa((ULONG64)&DefaultPlaceNameTextDeltaX,      4, 0x4B1C41),
+#define X_FUNC_BASE 0x4B7ED0
+        MemoryPatchVa((ULONG64)&DefaultPlaceNameTextDeltaX,      4, X_FUNC_BASE + 0x3F + 0x2),
+#undef X_FUNC_BASE
 
         FunctionJumpVa(Success ? Functions.GetGlyphsBitmap       : IMAGE_INVALID_VA, GetGlyphsBitmap, &StubGetGlyphsBitmap),
         FunctionJumpVa(Success ? Functions.DrawTalkText          : IMAGE_INVALID_VA, DrawTalkText),
