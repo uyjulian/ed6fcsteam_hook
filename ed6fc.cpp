@@ -136,7 +136,7 @@ inline void SearchAllPatterns(const ml::String& Pattern, PVOID Begin, LONG_PTR L
 
     for (PVOID reference = Begin; (ULONG_PTR)reference < ((ULONG_PTR)Begin + Length);)
     {
-        reference = SearchPatternSafe(Patterns.GetData(), Patterns.GetSize(), reference, Length);
+        reference = SearchPattern(Patterns.GetData(), Patterns.GetSize(), reference, ((ULONG_PTR)Begin - (ULONG_PTR)reference) + Length);
         if (!reference)
             break;
         references.Add(reference);
@@ -177,8 +177,8 @@ NTSTATUS GetGlyphBitmap(LONG_PTR FontSize, WCHAR Chr, PVOID& Buffer, ULONG Color
 
     if (Source != nullptr)
     {
-        BYTE LocalOutline[0x2000];
-        ZeroMemory(LocalOutline, FontSize * FontSize);
+        PBYTE LocalOutline = new BYTE[(FontSize * FontSize) * 2];
+        ZeroMemory(LocalOutline, (FontSize * FontSize) * 2);
 
         Outline = LocalOutline + bitmap->left + (FontSize - ML_MIN(FontSize, bitmap->top + 3)) * FontSize;
 
@@ -192,6 +192,9 @@ NTSTATUS GetGlyphBitmap(LONG_PTR FontSize, WCHAR Chr, PVOID& Buffer, ULONG Color
             }
 
             Outline += FontSize;
+
+            if (out > Outline)
+                break;
         }
 
         PBYTE Surface = (PBYTE)Buffer;
@@ -204,20 +207,27 @@ NTSTATUS GetGlyphBitmap(LONG_PTR FontSize, WCHAR Chr, PVOID& Buffer, ULONG Color
 
             for (ULONG_PTR Width = FontSize; Width; --Width)
             {
-                *out++ = *Source != 0 ? ((*Source << 0xC) | Color) : 0;
+                if (*Source != 0)
+                    *out++ = ((*Source << 0xC) | Color);
+                else
+                    out++;
                 ++Source;
             }
 
             Surface += Stride;
+            if ((PBYTE)out > Surface)
+                break;
         }
 
-        //Buffer = PtrAdd(Buffer, (bitmap->left + bitmap->bitmap.pitch + bitmap->left) * sizeof(USHORT));
-        Buffer = PtrAdd(Buffer, (Chr >= 0x80 ? FontSize : FontSize / 2) * sizeof(USHORT));
+        delete LocalOutline;
+
+        Buffer = PtrAdd(Buffer, (Face->glyph->advance.x >> 6) * sizeof(USHORT));//(bitmap->left + bitmap->bitmap.pitch + bitmap->left) * sizeof(USHORT));
+        // Buffer = PtrAdd(Buffer, (Chr >= 0x80 ? FontSize : FontSize / 2) * sizeof(USHORT));
     }
     else
     {
-        //Buffer = PtrAdd(Buffer, Face->glyph->metrics.horiAdvance * 2);
-        Buffer = PtrAdd(Buffer, Chr == ' ' ? FontSize : FontSize * 2);
+        Buffer = PtrAdd(Buffer, (Face->glyph->advance.x >> 6) * sizeof(USHORT));
+        // Buffer = PtrAdd(Buffer, Chr == ' ' ? FontSize : FontSize * 2);
     }
 
     FT_Done_Glyph(glyph);
@@ -917,6 +927,7 @@ BOOL Initialize(PVOID BaseAddress)
 
     PATCH_MEMORY_DATA p[] =
     {
+#if 0
         MemoryPatchVa(
             (ULONG64)(API_POINTER(::CreateFileA))[] (LPCSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes, HANDLE hTemplateFile) -> HANDLE
             {
@@ -929,6 +940,7 @@ BOOL Initialize(PVOID BaseAddress)
             },
             sizeof(PVOID), LookupImportTable(BaseAddress, nullptr, KERNEL32_CreateFileA)
         ),
+#endif
 
         MemoryPatchVa(
             (ULONG64)(API_POINTER(::Sleep))[] (ULONG ms) -> VOID
