@@ -3,8 +3,6 @@
 
 #include "ml.h"
 
-#define DBG 0
-
 using ml::String;
 using ml::GrowableArray;
 

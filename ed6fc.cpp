@@ -6,9 +6,6 @@
 
 #include "ed6fc.h"
 #include "ml.cpp"
-#if 0
-#include "DWriteRender.h"
-#else
 #include <ft2build.h>
 #include <freetype.h>
 #include <ftglyph.h>
@@ -18,7 +15,6 @@
 #define FT_INT(_int, _float) ((_int << 6) | (_float))
 FT_Library  FTLibrary;
 FT_Face     Face;
-#endif
 #include <stdio.h>
 #include <functional>
 
@@ -146,12 +142,6 @@ inline void SearchAllPatterns(const ml::String& Pattern, PVOID Begin, LONG_PTR L
     callback(references);
 
 }
-
-#if 0
-DWriteRender *DWriteMBCSRenders[countof(FontSizeTable)];
-DWriteRender *DWriteAnsiRenders[countof(FontSizeTable)];
-DWriteRender *DWriteSJISRenders[countof(FontSizeTable)];
-#endif
 
 VOID (NTAPI *StubGetGlyphsBitmap)(PCSTR Text, PVOID Buffer, ULONG Stride, ULONG ColorIndex);
 
@@ -359,19 +349,11 @@ BOOL TranslateChar(PCSTR Text, USHORT& translated)
 
 PVOID NTAPI GetGlyphsBitmap(PCSTR Text, PVOID Buffer, ULONG Stride, ULONG ColorIndex)
 {
-#if 0
-    DWriteRender    *mbcsRender, *ansiRender, *sjisRender;
-#endif
     ULONG_PTR       fontSize, fontIndex, color, width, runeWidth;
     ULONG_PTR Encoding = CP_SHIFTJIS;
 
     fontIndex   = GameFontRender->FontSizeIndex;
     fontSize    = FontSizeTable[fontIndex];
-#if 0
-    mbcsRender  = DWriteMBCSRenders[fontIndex];
-    ansiRender  = DWriteAnsiRenders[fontIndex];
-    sjisRender  = DWriteSJISRenders[fontIndex];
-#endif
     color       = FontColorTable[ColorIndex];
 
     FT_Set_Pixel_Sizes(Face, fontSize, fontSize);
@@ -379,10 +361,6 @@ PVOID NTAPI GetGlyphsBitmap(PCSTR Text, PVOID Buffer, ULONG Stride, ULONG ColorI
     int nLen = MultiByteToWideChar(Encoding, 0, Text, -1, NULL, NULL);
     LPWSTR wText = new WCHAR[nLen];
     MultiByteToWideChar(Encoding, 0, Text, -1, wText, nLen);
-
-#if DBG
-        fprintf("Printing text: %s\n", Text);
-#endif
 
     for (WCHAR* chr = wText; *chr; ++chr)
     {
@@ -492,9 +470,6 @@ BOOL CDECL LoadFileFromDat(PVOID buffer, ULONG datIndex, ULONG datOffset, ULONG 
 
     if (NT_SUCCESS(dat.Open(path + String::Format(L"DAT\\ED6_DT%02X\\%.*S", datIndex, sizeof(entry->FileName), entry->FileName))))
     {
-#if DBG
-        fprintf("Filesystem loading: %s\n", entry->FileName);
-#endif
         *(PULONG)PtrAdd(buffer, 0) = fileSize;
         *(PULONG)PtrAdd(buffer, 4) = RAW_FILE_MAGIC;
         *(PULONG)PtrAdd(buffer, 8) = dat.GetSize32();
@@ -595,61 +570,8 @@ PVOID FindAndAdvance(ULONG_PTR Advance, ARGS... args)
     return p == nullptr ? IMAGE_INVALID_VA : PtrAdd(p, Advance);
 }
 
-#if 0
-NTSTATUS InitializeDWrite()
-{
-    NTSTATUS hr;
-    ID2D1Factory*       factory;
-    IDWriteFactory*     dwrite;
-    IDWriteGdiInterop*  gdiInterop;
-
-    factory = nullptr;
-    dwrite = nullptr;
-
-    hr = S_OK;
-
-    LOOP_ONCE
-    {
-        PBYTE           fontSize;
-        DWriteRender**  mbcsRender = DWriteMBCSRenders;
-        DWriteRender**  ansiRender = DWriteAnsiRenders;
-        DWriteRender**  sjisRender = DWriteSJISRenders;
-
-        auto createRender = [](DWriteRender**& render, PCWSTR fontPath, PCWSTR faceName, ULONG_PTR fontSize)
-        {
-            *render = new DWriteRender();
-            if (*render == nullptr)
-                return STATUS_NO_MEMORY;
-
-            return (*render++)->Initialize(fontPath, faceName, fontSize);
-        };
-
-        FOR_EACH_ARRAY(fontSize, FontSizeTable)
-        {
-            hr = createRender(mbcsRender, L"font.ttf", nullptr, *fontSize);
-            FAIL_BREAK(hr);
-
-            hr = createRender(ansiRender, nullptr, L"SIMHEI", *fontSize);
-            FAIL_BREAK(hr);
-
-            hr = createRender(sjisRender, L"jpfont.ttf", nullptr, *fontSize);
-            FAIL_BREAK(hr);
-        }
-    }
-
-    SafeReleaseT(factory);
-    SafeReleaseT(dwrite);
-
-    return hr;
-}
-#endif
-
 BOOL UnInitialize(PVOID BaseAddress)
 {
-#if DBG
-    //PauseConsole(L"any key");
-#endif
-
     return FALSE;
 }
 
@@ -705,10 +627,6 @@ NTSTATUS SearchFunctions(PED6_FC_HOOK_FUNCTIONS functions)
 
                 break;
         }
-
-#if DBG
-        fprintf(stderr, "Hook pointer %p\n", *hooks[i].Address);
-#endif
     }
 
     return STATUS_SUCCESS;
@@ -770,12 +688,6 @@ BOOL Initialize(PVOID BaseAddress)
 
     ml::MlInitialize();
 
-#if DBG
-
-    AllocConsole();
-
-#endif
-
     BaseAddress = GetExeModuleHandle();
 
     //
@@ -824,8 +736,6 @@ BOOL Initialize(PVOID BaseAddress)
     }
 #endif
     PatchExeText(BaseAddress);
-
-    //DWriteRenders[9]->DrawRune(L'P', FontColorTable[0], 0, 0, 0), Ps::ExitProcess(0);
 
     if (Success)
     {
