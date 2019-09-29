@@ -1,8 +1,5 @@
-// this file must be compiled under zh-CN locale
 
 #pragma comment(linker, "/ENTRY:DllMain")
-//#pragma comment(linker, "/SECTION:.text,ERW /MERGE:.rdata=.text /MERGE:.data=.text /MERGE:.text1=.text /SECTION:.idata,ERW")
-//#pragma comment(linker, "/SECTION:.Asuna,ERW /MERGE:.text=.Asuna")
 
 #include "ed6fc.h"
 #include "ml.cpp"
@@ -208,140 +205,16 @@ NTSTATUS GetGlyphBitmap(LONG_PTR FontSize, WCHAR Chr, PVOID& Buffer, ULONG Color
 
         delete LocalOutline;
 
-        Buffer = PtrAdd(Buffer, (Face->glyph->advance.x >> 6) * sizeof(USHORT));//(bitmap->left + bitmap->bitmap.pitch + bitmap->left) * sizeof(USHORT));
-        // Buffer = PtrAdd(Buffer, (Chr >= 0x80 ? FontSize : FontSize / 2) * sizeof(USHORT));
+        Buffer = PtrAdd(Buffer, (Face->glyph->advance.x >> 6) * sizeof(USHORT));
     }
     else
     {
         Buffer = PtrAdd(Buffer, (Face->glyph->advance.x >> 6) * sizeof(USHORT));
-        // Buffer = PtrAdd(Buffer, Chr == ' ' ? FontSize : FontSize * 2);
     }
 
     FT_Done_Glyph(glyph);
 
     return STATUS_SUCCESS;
-
-    //return Source != nullptr ? STATUS_SUCCESS : STATUS_UNSUCCESSFUL;
-}
-
-BOOL TranslateChar(PCSTR Text, USHORT& translated)
-{
-    USHORT ch;
-
-    ch = *(PUSHORT)Text;
-
-#if 1
-
-    switch (ch)
-    {
-        default:
-            return FALSE;
-
-        case 0xA181:
-        case 0xF6A1:
-            translated = L'■';
-            break;
-
-        case 0x4881:
-            translated = L'？';
-            break;
-
-        case 0x9F81:
-            translated = L'◆';
-            break;
-
-        case 0xAA84:
-            translated = L'━';
-            break;
-
-        case 0x4081:
-        case 0xA1A1:
-            translated = L'　';
-            break;
-
-        case 0x9A81:
-            translated = L'★';
-            break;
-
-        case 0x4C87:
-            translated = L'⑬';
-            break;
-
-        case 0x4D87:
-            translated = L'⑭';
-            break;
-
-        case 0x5C81:    // 手册
-            // translated = 0x9F84;
-            translated = L'―';
-            break;
-
-        case 0x5AA9:
-            translated = L'♥';
-            break;
-
-        case 0xD1A1:
-            translated = L'♪';
-            break;
-
-        case 0xADA1:
-            translated = L'…';
-            break;
-
-        case 0xA4A1:
-            translated = L'・';
-            break;
-    }
-
-#else
-
-    switch (ch)
-    {
-        default:
-            return FALSE;
-
-        case 0xA181:    // 仭
-        case 0x9F81:    // 仧   菱形
-        case 0xAA84:    // 劒   横杠
-        case 0x4081:    // 丂   空格
-        case 0x9A81:    // 仛   ★
-        case 0x4C87:    // 圆圈13
-        case 0x4D87:    // 圆圈14
-            translated = ch;
-            break;
-
-        case 0xA1A1:    // 全角空格
-            translated = 0x4081;
-            break;
-
-        case 0x5C81:    // 乗   横杠
-            translated = 0x9F84;
-            break;
-
-        case 0x5AA9:    // ㈱ 心形
-            translated = 0x8A87;    // TAG2('噴');
-            break;
-
-        case 0xD1A1:    // ⊙ 音符
-            translated = 0xF481;  // TAG2('侓');
-            break;
-
-        case 0xF6A1:    // ■ 方块
-            translated = 0xA181;
-            break;
-
-        case 0xADA1:    // … 中文省略号
-            translated = 0x6381;
-            break;
-
-        case 0xA4A1:    // 中点
-            translated = 0x4581;
-            break;
-    }
-
-#endif
-
-    return TRUE;
 }
 
 PVOID NTAPI GetGlyphsBitmap(PCSTR Text, PVOID Buffer, ULONG Stride, ULONG ColorIndex)
@@ -361,53 +234,10 @@ PVOID NTAPI GetGlyphsBitmap(PCSTR Text, PVOID Buffer, ULONG Stride, ULONG ColorI
 
     for (WCHAR* chr = wText; *chr; ++chr)
     {
-#if 0
-        USHORT translated;
-        CHAR ansi = Text[0];
-
-        if (ansi == ' ')
-        {
-            width = fontSize / 2;
-            ++Text;
-        }
-        else if (ansi > 0)
-        {
-            ansiRender->DrawRune(chr, color, Buffer, Stride, &runeWidth);
-            width = fontSize / 2;
-            ++Text;
-        }
-        else if (TranslateChar(Text, translated))
-        {
-            CHAR tmp[3] = { translated & 0xFF, translated >> 8 };
-            //StubGetGlyphsBitmap(tmp, Buffer, Stride, ColorIndex);
-
-            sjisRender->DrawRune(translated, color, Buffer, Stride, &runeWidth);
-            width = fontSize;
-            Text += 2;
-        }
-        else
-        {
-            mbcsRender->DrawRune(chr, color, Buffer, Stride, &runeWidth);
-            width = fontSize;
-            Text += 2;
-        }
-
-        Buffer = PtrAdd(Buffer, (LONG_PTR)width * 2);
-#else
         if (NT_FAILED(GetGlyphBitmap(fontSize, *chr, Buffer, ColorIndex, Stride)))
         {
-#if 0
-            WCHAR wcs[] = { *chr, 0 };
-            LPSTR nText = new CHAR[2];
-            nText[1] = 0;
-            WideCharToMultiByte(Encoding, 0, wcs, 2, nText, 2, NULL, NULL);
-            StubGetGlyphsBitmap(nText, Buffer, Stride, ColorIndex);
-            delete nText;
-#endif
             Buffer = PtrAdd(Buffer, (LONG_PTR)fontSize * 2);
         }
-
-#endif
     }
 
     delete wText;
