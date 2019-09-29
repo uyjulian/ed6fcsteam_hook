@@ -1,4 +1,4 @@
-﻿// this file must be compiled under zh-CN locale
+// this file must be compiled under zh-CN locale
 
 #pragma comment(linker, "/ENTRY:DllMain")
 //#pragma comment(linker, "/SECTION:.text,ERW /MERGE:.rdata=.text /MERGE:.data=.text /MERGE:.text1=.text /SECTION:.idata,ERW")
@@ -738,11 +738,11 @@ BOOL Initialize(PVOID BaseAddress)
     }
 
     //FAIL_RETURN(SearchFunctions(&Functions));
-    Functions.GetGlyphsBitmap = GET_GLYPHS_BITMAP_VA;
-    Functions.DrawTalkText = DRAW_TALK_TEXT_VA;
-    Functions.DrawDialogText = DRAW_DIALOG_TEXT_VA;
-    Functions.LoadFileFromDAT = LOAD_FILE_FROM_DAT_VA;
-    Functions.DecompressData = DECOMPRESS_DATA_VA;
+    Functions.GetGlyphsBitmap = (PVOID)GET_GLYPHS_BITMAP_VA;
+    Functions.DrawTalkText = (PVOID)DRAW_TALK_TEXT_VA;
+    Functions.DrawDialogText = (PVOID)DRAW_DIALOG_TEXT_VA;
+    Functions.LoadFileFromDAT = (PVOID)LOAD_FILE_FROM_DAT_VA;
+    Functions.DecompressData = (PVOID)DECOMPRESS_DATA_VA;
 
     ExeModule = FindLdrModuleByHandle(nullptr);
 
@@ -999,40 +999,28 @@ BOOL Initialize(PVOID BaseAddress)
         // MemoryPatchVa(0xCull, 1, X_FUNC_BASE + 0x 0x4B7A46),
         // MemoryPatchVa(0xCull, 1, X_FUNC_BASE + 0x 0x4B7D14),
 
-        // 物品已有个数窗口位置
-#define X_FUNC_BASE 0x499280
+        // The item has a number of window positions
         //CWindow::CWindow(104, 14, ...)         // 4743A0
-        MemoryPatchVa(0x104ull, 4, X_FUNC_BASE + 0x10B + 0x4),  // x
-        MemoryPatchVa(0x14ull,  4, X_FUNC_BASE + 0x11F + 0x4),  // width
-#undef X_FUNC_BASE
-#define X_FUNC_BASE 0x49C790
-        MemoryPatchVa(0x104ull, 4, X_FUNC_BASE + 0x28 + 0x4),  // x
-        MemoryPatchVa(0x14ull,  4, X_FUNC_BASE + 0x3C + 0x4),  // width
-#undef X_FUNC_BASE
+        MemoryPatchVa(0x104ull, 4, WINDOW_POSITION_1_ADDR + 0x10B + 0x4),  // x
+        MemoryPatchVa(0x14ull,  4, WINDOW_POSITION_1_ADDR + 0x11F + 0x4),  // width
+        MemoryPatchVa(0x104ull, 4, WINDOW_POSITION_2_ADDR + 0x28 + 0x4),  // x
+        MemoryPatchVa(0x14ull,  4, WINDOW_POSITION_2_ADDR + 0x3C + 0x4),  // width
 
-        // 战斗状态
-#define X_FUNC_BASE 0x43AF10
-        MemoryPatchVa(0xC98B0000003Eull,  6, X_FUNC_BASE + 0x128 + 0x1),  // hp fixed x
-#undef X_FUNC_BASE
+        // Combat state
+        MemoryPatchVa(0xC98B0000003Eull,  6, COMBAT_STATE_ADDR + 0x128 + 0x1),  // hp fixed x
 
         // char type switch table
 //referenced by 0x486DF0+19
         MemoryPatchVa(0x0404ull,    2, 0x486EBC),
 
         // jp font size limit
-#define X_FUNC_BASE 0x4DD9B0
-        MemoryPatchVa(0xEBull,      1, X_FUNC_BASE + 0x2A4),
-#undef X_FUNC_BASE
+        MemoryPatchVa(0xEBull,      1, JP_FONT_SIZE_LIMIT_ADDR + 0x2A4),
 
         // HP EP font size
-#define X_FUNC_BASE 0x4773A0
-        MemoryPatchVa(0x02ull,      1, X_FUNC_BASE + 0x72A + 0x1),
-#undef X_FUNC_BASE
+        MemoryPatchVa(0x02ull,      1, HP_EP_FONT_SIZE_ADDR + 0x72A + 0x1),
 
         // place name text X delta
-#define X_FUNC_BASE 0x4B7ED0
-        MemoryPatchVa((ULONG64)&DefaultPlaceNameTextDeltaX,      4, X_FUNC_BASE + 0x3F + 0x2),
-#undef X_FUNC_BASE
+        MemoryPatchVa((ULONG64)&DefaultPlaceNameTextDeltaX,      4, PLACE_NAME_TEXT_X_DELTA_ADDR + 0x3F + 0x2),
 
         FunctionJumpVa(Success ? Functions.GetGlyphsBitmap       : IMAGE_INVALID_VA, GetGlyphsBitmap, &StubGetGlyphsBitmap),
         FunctionJumpVa(Success ? Functions.DrawTalkText          : IMAGE_INVALID_VA, DrawTalkText),
