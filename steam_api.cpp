@@ -1042,7 +1042,7 @@ struct CSteamRemoteStorage : public ISteamRemoteStorage
 //////////////////////////////////////////////////////////////////////////
 
 static CSteamApps apps;
-static CSteamUserStats stat;
+static CSteamUserStats statX;
 static CSteamClient client;
 static CSteamRemoteStorage storage;
 
@@ -1119,7 +1119,7 @@ ISteamApps* S_CALLTYPE SteamApps()
 ISteamUserStats* S_CALLTYPE SteamUserStats()
 {
     STEAM_LOG(L"");
-    return &stat;
+    return &statX;
 }
 
 ISteamClient* S_CALLTYPE SteamClient()

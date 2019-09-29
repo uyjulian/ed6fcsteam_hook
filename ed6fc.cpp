@@ -714,6 +714,43 @@ NTSTATUS SearchFunctions(PED6_FC_HOOK_FUNCTIONS functions)
     return STATUS_SUCCESS;
 }
 
+#ifdef __clang__
+// Some fixes
+
+HANDLE NTAPI CreateFileAFix(LPCSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes, HANDLE hTemplateFile)
+{
+    if (StrCompareA(lpFileName, "dll\\lang_jpn.dll") == 0)
+    {
+        lpFileName = "ed6_win.exe";
+    }
+
+    return StubCreateFileA(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
+}
+
+VOID NTAPI SleepFixFunc(ULONG ms)
+{
+    Ps::Sleep(SleepFix ? ms == 0 ? 1 : ms : ms);
+}
+
+BOOL NTAPI SetWindowPosFix(HWND Wnd, HWND InsertAfter, int X, int Y, int cx, int cy, UINT Flags)
+{
+    if (Flags == SWP_NOMOVE)
+    {
+        RECT WorkArea;
+
+        SystemParametersInfoW(SPI_GETWORKAREA, 0, &WorkArea, 0);
+        X = ((WorkArea.right - WorkArea.left) - cx) / 2;
+        Y = ((WorkArea.bottom - WorkArea.top) - cy) / 2;
+
+        CLEAR_FLAG(Flags, SWP_NOMOVE);
+
+        OrigGameWindowProc = (WNDPROC)SetWindowLongPtrW(Wnd, GWLP_WNDPROC, (LONG_PTR)GameWindowProc);
+    }
+
+    return SetWindowPos(Wnd, InsertAfter, X, Y, cx, cy, Flags);
+}
+#endif
+
 BOOL Initialize(PVOID BaseAddress)
 {
     using namespace Mp;
@@ -928,6 +965,16 @@ BOOL Initialize(PVOID BaseAddress)
     PATCH_MEMORY_DATA p[] =
     {
 #if 0
+#ifdef __clang__
+#if 0
+        MemoryPatchVa(CreateFileAFix, sizeof(PVOID), LookupImportTable(BaseAddress, nullptr, KERNEL32_CreateFileA)),
+#endif
+
+        MemoryPatchVa((ULONG64)SleepFixFunc, sizeof(PVOID), LookupImportTable(BaseAddress, nullptr, KERNEL32_Sleep)),
+
+        MemoryPatchVa((ULONG64)SetWindowPosFix, sizeof(PVOID), LookupImportTable(GetExeModuleHandle(), nullptr, USER32_SetWindowPos)),
+#else
+#if 0
         MemoryPatchVa(
             (ULONG64)(API_POINTER(::CreateFileA))[] (LPCSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes, HANDLE hTemplateFile) -> HANDLE
             {
@@ -971,6 +1018,8 @@ BOOL Initialize(PVOID BaseAddress)
             sizeof(PVOID),
             LookupImportTable(GetExeModuleHandle(), nullptr, USER32_SetWindowPos)
         ),
+#endif
+#endif
 
         // cmp r8, 80
         // 80 ?? 80 72 ?? 80 ?? A0 72 ?? 80 ?? E0 72 ??
