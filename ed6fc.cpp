@@ -18,9 +18,6 @@ FT_Face     Face;
 #include <stdio.h>
 #include <functional>
 
-#pragma comment(lib, "dwrite.lib")
-#pragma comment(lib, "d2d1.lib")
-
 ML_OVERLOAD_NEW
 
 BOOL SleepFix;
@@ -699,9 +696,6 @@ BOOL Initialize(PVOID BaseAddress)
 
     Rtl::SetExeDirectoryAsCurrent();
 
-#if 0
-    Success = NT_SUCCESS(InitializeDWrite());
-#else
     Success = FALSE;
     FaceBuffer = nullptr;
 
@@ -734,7 +728,7 @@ BOOL Initialize(PVOID BaseAddress)
         FreeMemoryP(FaceBuffer);
         // return TRUE;
     }
-#endif
+
     PatchExeText(BaseAddress);
 
     if (Success)
