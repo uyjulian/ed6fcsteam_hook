@@ -42,7 +42,6 @@ CXXFLAGS += -DNDEBUG
 CXXFLAGS += -O2
 CXXFLAGS += -I.
 CXXFLAGS += -I./ml
-CXXFLAGS += -I./freetype
 CXXFLAGS += -Wno-invalid-token-paste
 CXXFLAGS += -Wno-address-of-temporary
 CXXFLAGS += -Wno-c++11-narrowing
@@ -56,7 +55,6 @@ LDFLAGS += -L/Users/julian/.winedev/drive_c/Program\ Files/Microsoft\ DirectX\ S
 LDFLAGS += -L/Users/julian/.winedev/drive_c/WinDDK/7600.16385.1/lib/win7/i386
 LDLIBS += -nostdlib -lmsvcrt -Wno-msvc-not-found 
 
-LDLIBS += -lfreetype
 LDLIBS += -ldelayimp
 LDLIBS += -lntdll
 LDLIBS += -lkernel32
@@ -77,12 +75,12 @@ LDLIBS += -shared
 .PHONY: clean
 
 DINPUT8.dll: $(FILES)
-	link /LIBPATH:c:\lib delayimp.lib ntdll.lib kernel32.lib user32.lib gdiplus.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib freetype.lib /OPT:REF /delayload:USER32.dll /nologo /dll /machine:I386 /ltcg /out:$@ $^
+	link /LIBPATH:c:\lib delayimp.lib ntdll.lib kernel32.lib user32.lib gdiplus.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /OPT:REF /delayload:USER32.dll /nologo /dll /machine:I386 /ltcg /out:$@ $^
 #$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 
 %.o: %.cpp
-	cl /nologo /Gr /MD /W4 /GR- /O2 /Ob1 /D "WIN32" /D "NDEBUG" /D USE_NT_VER=1 /GS- /MP /arch:SSE /c /Fo$@ /Tp$< /I. /Iml /Ifreetype /utf-8
+	cl /nologo /Gr /MD /W4 /GR- /O2 /Ob1 /D "WIN32" /D "NDEBUG" /D USE_NT_VER=1 /GS- /MP /arch:SSE /c /Fo$@ /Tp$< /I. /Iml /utf-8
 
 #%.o: %.cpp
 #	$(CXX) $(CXXFLAGS) -o $@ -c $<

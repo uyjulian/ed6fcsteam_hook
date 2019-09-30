@@ -4,61 +4,15 @@
 #include "ed6fc.h"
 #include "ed6fc_info.h"
 #include "ml.cpp"
-#include <ft2build.h>
-#include <freetype.h>
-#include <ftglyph.h>
-#include <ftimage.h>
-#include <ftbitmap.h>
-#include <ftsynth.h>
-#define FT_INT(_int, _float) ((_int << 6) | (_float))
-FT_Library  FTLibrary;
-FT_Face     Face;
 #include <stdio.h>
 #include <functional>
 
 ML_OVERLOAD_NEW
 
-
 ED6HOOK_HOOK_INFO* HookInfo;
 BOOL SleepFix;
 PED6_FC_FONT_RENDER GameFontRender;
 API_POINTER(CreateFileA) StubCreateFileA;
-
-static BYTE FontSizeTable[] =
-{
-    0x08, 0x0c, 0x10, 0x14,
-    0x18, 0x20, 0x12, 0x1a,
-    0x1e, 0x24, 0x28, 0x2c,
-    0x30, 0x32, 0x36, 0x3c,
-    0x40, 0x48, 0x50, 0x60,
-    0x80, 0x90, 0xa0, 0xc0,
-};
-
-static USHORT FontColorTable[] =
-{
-    0x0fff, 0x0fc7, 0x0f52, 0x08cf, 0x0fb4, 0x08fa, 0x0888, 0x0fee, 0x0853, 0x0333,
-    0x0ca8, 0x0fdb, 0x0ace, 0x0cff, 0x056b, 0x0632, 0x0135, 0x0357, 0x0bbb,
-};
-
-static BYTE FontLumaTable[] =
-{
-    0x00, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
-    0x01, 0x01, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
-    0x02, 0x02, 0x02, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03,
-    0x03, 0x03, 0x03, 0x03, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
-    0x04, 0x04, 0x04, 0x04, 0x04, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05,
-    0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06,
-    0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07,
-    0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09,
-    0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A,
-    0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B,
-    0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0C, 0x0C, 0x0C, 0x0C,
-    0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0D, 0x0D, 0x0D,
-    0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0E, 0x0E,
-    0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0F,
-    0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F,
-};
 
 inline void SearchAllPatterns(const ml::String& Pattern, PVOID Begin, LONG_PTR Length, std::function<void(const ml::GrowableArray<PVOID>& references)> callback)
 {
@@ -140,113 +94,6 @@ inline void SearchAllPatterns(const ml::String& Pattern, PVOID Begin, LONG_PTR L
 
 }
 
-NTSTATUS GetGlyphBitmap(LONG_PTR FontSize, WCHAR Chr, PVOID& Buffer, ULONG ColorIndex, ULONG Stride)
-{
-    PBYTE           Outline, Source;
-    ULONG_PTR       Color;
-    FT_Glyph        glyph;
-    FT_BitmapGlyph  bitmap;
-
-    ULONG strenth = FT_INT(1, 0);
-
-    Color = FontColorTable[ColorIndex];
-
-    FT_Load_Glyph(Face, FT_Get_Char_Index(Face, Chr), FT_LOAD_DEFAULT | FT_LOAD_NO_BITMAP | FT_LOAD_FORCE_AUTOHINT | FT_LOAD_RENDER);
-    //FT_Bitmap_Embolden(FTLibrary, &Face->glyph->bitmap, 0, strenth);
-    FT_Render_Glyph(Face->glyph, FT_RENDER_MODE_NORMAL);
-    FT_Get_Glyph(Face->glyph, &glyph);
-    FT_Glyph_To_Bitmap(&glyph, FT_RENDER_MODE_NORMAL, nullptr, TRUE);
-
-    bitmap = (FT_BitmapGlyph)glyph;
-    Source = (PBYTE)bitmap->bitmap.buffer;
-
-    if (Source != nullptr)
-    {
-        PBYTE LocalOutline = new BYTE[(FontSize * FontSize) * 2];
-        ZeroMemory(LocalOutline, (FontSize * FontSize) * 2);
-
-        Outline = LocalOutline + bitmap->left + (FontSize - ML_MIN(FontSize, bitmap->top + 3)) * FontSize;
-
-        for (ULONG_PTR Height = bitmap->bitmap.rows; Height; --Height)
-        {
-            PBYTE out = Outline;
-
-            for (ULONG_PTR Width = bitmap->bitmap.width; Width; --Width)
-            {
-                *out++ = FontLumaTable[*Source++];
-            }
-
-            Outline += FontSize;
-
-            if (out > Outline)
-                break;
-        }
-
-        PBYTE Surface = (PBYTE)Buffer;
-
-        Source = LocalOutline;
-
-        for (ULONG_PTR Height = FontSize; Height; --Height)
-        {
-            PUSHORT out = (PUSHORT)Surface;
-
-            for (ULONG_PTR Width = FontSize; Width; --Width)
-            {
-                if (*Source != 0)
-                    *out++ = ((*Source << 0xC) | Color);
-                else
-                    out++;
-                ++Source;
-            }
-
-            Surface += Stride;
-            if ((PBYTE)out > Surface)
-                break;
-        }
-
-        delete LocalOutline;
-
-        Buffer = PtrAdd(Buffer, (Face->glyph->advance.x >> 6) * sizeof(USHORT));
-    }
-    else
-    {
-        Buffer = PtrAdd(Buffer, (Face->glyph->advance.x >> 6) * sizeof(USHORT));
-    }
-
-    FT_Done_Glyph(glyph);
-
-    return STATUS_SUCCESS;
-}
-
-PVOID NTAPI GetGlyphsBitmap(PCSTR Text, PVOID Buffer, ULONG Stride, ULONG ColorIndex)
-{
-    ULONG_PTR       fontSize, fontIndex, color, width, runeWidth;
-    ULONG_PTR Encoding = CP_SHIFTJIS;
-
-    fontIndex   = GameFontRender->FontSizeIndex;
-    fontSize    = FontSizeTable[fontIndex];
-    color       = FontColorTable[ColorIndex];
-
-    FT_Set_Pixel_Sizes(Face, fontSize, fontSize);
-
-    int nLen = MultiByteToWideChar(Encoding, 0, Text, -1, NULL, NULL);
-    LPWSTR wText = new WCHAR[nLen];
-    MultiByteToWideChar(Encoding, 0, Text, -1, wText, nLen);
-
-    for (WCHAR* chr = wText; *chr; ++chr)
-    {
-        if (NT_FAILED(GetGlyphBitmap(fontSize, *chr, Buffer, ColorIndex, Stride)))
-        {
-            Buffer = PtrAdd(Buffer, (LONG_PTR)fontSize * 2);
-        }
-    }
-
-    delete wText;
-
-    return Buffer;
-}
-
-
 PVOID NTAPI GetGlyphsBitmapJmp(PCSTR Text, PVOID Buffer, ULONG Stride, ULONG ColorIndex)
 {
 	PVOID (NTAPI *funcptr)(PCSTR, PVOID, ULONG, ULONG);
@@ -289,43 +136,6 @@ NAKED PVOID NakedDrawDialogText(PVOID thiz, PVOID, PVOID Buffer, ULONG Stride, P
   load file
 ************************************************************************/
 
-BOOL CDECL LoadFileFromDat(PVOID buffer, ULONG datIndex, ULONG datOffset, ULONG fileSize)
-{
-    PED6_DIR_ENTRY entry;
-
-    entry = DirCacheTable[datIndex];
-    if (entry == nullptr)
-        return FALSE;
-
-    LOOP_FOREVER
-    {
-        if (entry->Offset == datOffset && entry->Size == fileSize)
-            break;
-
-        ++entry;
-    }
-
-    String path;
-    NtFileDisk dat;
-
-    GetModuleDirectory(path, nullptr);
-
-    if (NT_SUCCESS(dat.Open(path + String::Format(L"DAT\\ED6_DT%02X\\%.*S", datIndex, sizeof(entry->FileName), entry->FileName))))
-    {
-        *(PULONG)PtrAdd(buffer, 0) = fileSize;
-        *(PULONG)PtrAdd(buffer, 4) = RAW_FILE_MAGIC;
-        *(PULONG)PtrAdd(buffer, 8) = dat.GetSize32();
-        return NT_SUCCESS(dat.Read(PtrAdd(buffer, 12)));
-    }
-
-    if (NT_FAILED(dat.Open(path + String::Format(L"ED6_DT%02X.dat", datIndex))))
-        return FALSE;
-
-    dat.Seek(datOffset);
-    return NT_SUCCESS(dat.Read(buffer, fileSize));
-}
-
-
 BOOL CDECL LoadFileFromDatJmp(PVOID buffer, ULONG datIndex, ULONG datOffset, ULONG fileSize)
 {
 	BOOL (CDECL *funcptr)(PVOID, ULONG, ULONG, ULONG);
@@ -337,21 +147,6 @@ BOOL CDECL LoadFileFromDatJmp(PVOID buffer, ULONG datIndex, ULONG datOffset, ULO
 	if (funcptr)
 		return funcptr(buffer, datIndex, datOffset, fileSize);
 	return FALSE;
-}
-
-
-ULONG_PTR NTAPI DecompressData(PBYTE& compressed, PBYTE& uncompressed)
-{
-    if (*(PULONG)&compressed[4] != RAW_FILE_MAGIC)
-        return ~0u;
-
-    ULONG size = *(PULONG)(compressed + 8);
-    CopyMemory(uncompressed, compressed + 12, size);
-
-    compressed += size + 12;
-    uncompressed += size;
-
-    return size;
 }
 
 ULONG_PTR NTAPI DecompressDataJmp(PBYTE compressed, PBYTE uncompressed)
@@ -545,7 +340,6 @@ BOOL Initialize(PVOID BaseAddress)
 
     BOOL                    Success;
     ULONG_PTR               SizeOfImage;
-    PVOID                   FaceBuffer;
     PLDR_MODULE             ExeModule;
     ED6_FC_HOOK_FUNCTIONS   Functions;
     ED6HOOK_INFO*           ED6HookInfo = NULL;
@@ -554,13 +348,9 @@ BOOL Initialize(PVOID BaseAddress)
 
     LdrDisableThreadCalloutsForDll(BaseAddress);
 
-    HMODULE LoaderModule = GetModuleHandleA("dinput8");
+    HMODULE LoaderModule = LoadLibraryA("ed6hook/ed6hook_core.dll");
     FARPROC LoaderModuleInfoFunc = NULL;
     if (LoaderModule)
-    	LoaderModuleInfoFunc = GetProcAddress(LoaderModule, "ed6_hook_get_info");
-    if (!LoaderModuleInfoFunc)
-    	LoaderModule = GetModuleHandleA("dsound");
-    if (LoaderModule && !LoaderModuleInfoFunc)
     	LoaderModuleInfoFunc = GetProcAddress(LoaderModule, "ed6_hook_get_info");
     if (LoaderModuleInfoFunc)
     	ED6HookInfo = ((ED6HOOK_INFO* (*)(void))LoaderModuleInfoFunc)();
@@ -568,7 +358,7 @@ BOOL Initialize(PVOID BaseAddress)
     DWORD CurrentExeTimeDateStamp = ImageNtHeaders(Ps::CurrentPeb()->ImageBaseAddress)->FileHeader.TimeDateStamp;
     HookInfo = NULL;
     if (ED6HookInfo) {
-    	if (HookInfo)
+    	if (ED6HookInfo->HookInfo)
     		HookInfo = ED6HookInfo->HookInfo;
 
 	    for (DWORD i = 0; i < ED6HookInfo->ExeInfoNum; i += 1) {
@@ -580,35 +370,12 @@ BOOL Initialize(PVOID BaseAddress)
     }
     else
     {
-    	fprintf(stderr, "Couldn't get hook info\n");
-    }
-
-    if (!ExeInfo.PeTimeDateStamp) {
-    	fprintf(stderr, "Couldn't find time date stamp 0x%x; reverting to built-in defaults\n", CurrentExeTimeDateStamp);
-	    ExeInfo.PeTimeDateStamp         = 0x59A37AD3;
-	    ExeInfo.GetGlyphsBitmapVa       =   0x4b8060;
-	    ExeInfo.DrawTalkTextVa          =   0x4868a0;
-	    ExeInfo.DrawDialogTextVa        =   0x4868f0;
-	    ExeInfo.LoadFileFromDatVa       =   0x4629e0;
-	    ExeInfo.DecompressDataVa        =   0x46a6b0;
-	    ExeInfo.WindowPosition1Addr     =   0x499280;
-	    ExeInfo.WindowPosition2Addr     =   0x49C790;
-	    ExeInfo.CombatStateAddr         =   0x43AF10;
-	    ExeInfo.JpFontSizeLimitAddr     =   0x4DD9B0;
-	    ExeInfo.HpEpFontSizeAddr        =   0x4773A0;
-	    ExeInfo.PlaceNameTextXDeltaAddr =   0x4B7ED0;
-    }
-
-    if (!HookInfo) {
-    	HookInfo = (ED6HOOK_HOOK_INFO *)malloc(sizeof(ED6HOOK_HOOK_INFO));
-    	HookInfo->GetGlyphsBitmap = GetGlyphsBitmap;
-    	HookInfo->DecompressData = DecompressData;
-    	HookInfo->LoadFileFromDat = LoadFileFromDat;
+    	fprintf(stderr, "Couldn't retrieve information from ed6hook_core\n");
     }
 
     if (CurrentExeTimeDateStamp != ExeInfo.PeTimeDateStamp) {
         fprintf(stderr, "Incompatible timedatestamp 0x%x\n", ImageNtHeaders(Ps::CurrentPeb()->ImageBaseAddress)->FileHeader.TimeDateStamp);
-        return TRUE;
+        return FALSE;
     }
 
     ml::MlInitialize();
@@ -624,38 +391,7 @@ BOOL Initialize(PVOID BaseAddress)
 
     Rtl::SetExeDirectoryAsCurrent();
 
-    Success = FALSE;
-    FaceBuffer = nullptr;
-
-    LOOP_ONCE
-    {
-        NtFileMemory file;
-
-        if (FT_Init_FreeType(&FTLibrary) != FT_Err_Ok)
-            break;
-
-        if (NT_FAILED(file.Open(L"user.ttf")))
-            break;
-
-        FaceBuffer = AllocateMemoryP(file.GetSize32());
-        if (FaceBuffer == nullptr)
-            break;
-
-        CopyMemory(FaceBuffer, file.GetBuffer(), file.GetSize32());
-
-        if (FT_New_Memory_Face(FTLibrary, (PBYTE)FaceBuffer, file.GetSize32(), 0, &Face) != FT_Err_Ok)
-            break;
-
-        FT_Select_Charmap(Face, FT_ENCODING_SJIS);
-
-        Success = TRUE;
-    }
-
-    if (Success == FALSE)
-    {
-        FreeMemoryP(FaceBuffer);
-        // return TRUE;
-    }
+    Success = TRUE;
 
     PatchExeText(BaseAddress);
 
@@ -664,6 +400,14 @@ BOOL Initialize(PVOID BaseAddress)
         GameFontRender = FindFontRender(BaseAddress);
         Success = GameFontRender != nullptr;
     }
+
+	if (ED6HookInfo && ED6HookInfo->ExtraInfo) {
+		if (GameFontRender != nullptr) {
+			ED6HookInfo->ExtraInfo->GameFontRender = GameFontRender;
+			fprintf(stderr, "GameFontRender is set\n");
+		}
+
+	}
 
     //FAIL_RETURN(SearchFunctions(&Functions));
     Functions.GetGlyphsBitmap = (PVOID)ExeInfo.GetGlyphsBitmapVa;
@@ -950,12 +694,12 @@ BOOL Initialize(PVOID BaseAddress)
         // place name text X delta
         MemoryPatchVa((ULONG64)&DefaultPlaceNameTextDeltaX,      4, ExeInfo.PlaceNameTextXDeltaAddr + 0x3F + 0x2),
 
-        FunctionJumpVa(Success ? Functions.GetGlyphsBitmap       : IMAGE_INVALID_VA, GetGlyphsBitmap),
-        FunctionJumpVa(Success ? Functions.DrawTalkText          : IMAGE_INVALID_VA, DrawTalkText),
-        FunctionJumpVa(Success ? Functions.DrawDialogText        : IMAGE_INVALID_VA, NakedDrawDialogText),
+        FunctionJumpVa(Functions.GetGlyphsBitmap ? Functions.GetGlyphsBitmap : IMAGE_INVALID_VA, GetGlyphsBitmapJmp),
+        FunctionJumpVa(Functions.DrawTalkText    ? Functions.DrawTalkText    : IMAGE_INVALID_VA, DrawTalkText),
+        FunctionJumpVa(Functions.DrawDialogText  ? Functions.DrawDialogText  : IMAGE_INVALID_VA, NakedDrawDialogText),
 
-        FunctionJumpVa(Functions.LoadFileFromDAT,    LoadFileFromDat),
-        FunctionJumpVa(Functions.DecompressData,     NakedDecompressData, &StubNakedDecompressData),
+        FunctionJumpVa(Functions.LoadFileFromDAT ? Functions.LoadFileFromDAT : IMAGE_INVALID_VA, LoadFileFromDatJmp),
+        FunctionJumpVa(Functions.DecompressData  ? Functions.DecompressData  : IMAGE_INVALID_VA, NakedDecompressData, &StubNakedDecompressData),
     };
 
     PatchMemory(p, countof(p), BaseAddress);
