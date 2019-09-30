@@ -2,6 +2,7 @@
 #pragma comment(linker, "/ENTRY:DllMain")
 
 #include "ed6fc.h"
+#include "ed6fc_info.h"
 #include "ml.cpp"
 #include <ft2build.h>
 #include <freetype.h>
@@ -17,6 +18,8 @@ FT_Face     Face;
 
 ML_OVERLOAD_NEW
 
+
+ED6HOOK_HOOK_INFO* HookInfo;
 BOOL SleepFix;
 PED6_FC_FONT_RENDER GameFontRender;
 API_POINTER(CreateFileA) StubCreateFileA;
@@ -137,8 +140,6 @@ inline void SearchAllPatterns(const ml::String& Pattern, PVOID Begin, LONG_PTR L
 
 }
 
-VOID (NTAPI *StubGetGlyphsBitmap)(PCSTR Text, PVOID Buffer, ULONG Stride, ULONG ColorIndex);
-
 NTSTATUS GetGlyphBitmap(LONG_PTR FontSize, WCHAR Chr, PVOID& Buffer, ULONG ColorIndex, ULONG Stride)
 {
     PBYTE           Outline, Source;
@@ -245,10 +246,24 @@ PVOID NTAPI GetGlyphsBitmap(PCSTR Text, PVOID Buffer, ULONG Stride, ULONG ColorI
     return Buffer;
 }
 
+
+PVOID NTAPI GetGlyphsBitmapJmp(PCSTR Text, PVOID Buffer, ULONG Stride, ULONG ColorIndex)
+{
+	PVOID (NTAPI *funcptr)(PCSTR, PVOID, ULONG, ULONG);
+	*reinterpret_cast<void**>(&funcptr) = 0;
+	
+	if (HookInfo->GetGlyphsBitmap)
+		*reinterpret_cast<void**>(&funcptr) = HookInfo->GetGlyphsBitmap;
+
+	if (funcptr)
+		return funcptr(Text, Buffer, Stride, ColorIndex);
+	return NULL;
+}
+
 PVOID FASTCALL DrawTalkText(PVOID thiz, PVOID, PVOID Buffer, ULONG Stride, PCSTR Text, ULONG ColorIndex)
 {
     CHAR tmp[3] = { Text[0], Text[0] < 0 ? Text[1] : 0 };
-    return GetGlyphsBitmap(tmp, Buffer, Stride * 2, ColorIndex);
+    return GetGlyphsBitmapJmp(tmp, Buffer, Stride * 2, ColorIndex);
 }
 
 NAKED PVOID NakedDrawDialogText(PVOID thiz, PVOID, PVOID Buffer, ULONG Stride, PCSTR Text, ULONG ColorIndex)
@@ -264,7 +279,7 @@ NAKED PVOID NakedDrawDialogText(PVOID thiz, PVOID, PVOID Buffer, ULONG Stride, P
         push    edx;                    // stride
         push    eax;                    // buffer
         push    ebx;                    // text
-        call    GetGlyphsBitmap;
+        call    GetGlyphsBitmapJmp;
         pop     ebx;
         ret     8;
     }
@@ -310,6 +325,21 @@ BOOL CDECL LoadFileFromDat(PVOID buffer, ULONG datIndex, ULONG datOffset, ULONG 
     return NT_SUCCESS(dat.Read(buffer, fileSize));
 }
 
+
+BOOL CDECL LoadFileFromDatJmp(PVOID buffer, ULONG datIndex, ULONG datOffset, ULONG fileSize)
+{
+	BOOL (CDECL *funcptr)(PVOID, ULONG, ULONG, ULONG);
+	*reinterpret_cast<void**>(&funcptr) = 0;
+	
+	if (HookInfo->LoadFileFromDat)
+		*reinterpret_cast<void**>(&funcptr) = HookInfo->LoadFileFromDat;
+
+	if (funcptr)
+		return funcptr(buffer, datIndex, datOffset, fileSize);
+	return FALSE;
+}
+
+
 ULONG_PTR NTAPI DecompressData(PBYTE& compressed, PBYTE& uncompressed)
 {
     if (*(PULONG)&compressed[4] != RAW_FILE_MAGIC)
@@ -324,6 +354,19 @@ ULONG_PTR NTAPI DecompressData(PBYTE& compressed, PBYTE& uncompressed)
     return size;
 }
 
+ULONG_PTR NTAPI DecompressDataJmp(PBYTE compressed, PBYTE uncompressed)
+{
+	ULONG_PTR (NTAPI *funcptr)(PBYTE&, PBYTE&);
+	*reinterpret_cast<void**>(&funcptr) = 0;
+	
+	if (HookInfo->DecompressData)
+		*reinterpret_cast<void**>(&funcptr) = HookInfo->DecompressData;
+
+	if (funcptr)
+		return funcptr(compressed, uncompressed);
+	return NULL;
+}
+
 NAKED VOID CDECL NakedLoadFileFromDat()
 {
     INLINE_ASM
@@ -332,7 +375,7 @@ NAKED VOID CDECL NakedLoadFileFromDat()
         push    [esp + 0Ch];
         push    [esp + 0Ch];
         push    edi;
-        call    LoadFileFromDat;
+        call    LoadFileFromDatJmp;
         add     esp, 10h;
         ret;
     }
@@ -346,7 +389,7 @@ NAKED VOID NakedDecompressData()
     {
         push    ebx;
         push    edi;
-        call    DecompressData;
+        call    DecompressDataJmp;
         inc     eax;
         jnz     UNCOMPRESSED;
         jmp     [StubNakedDecompressData];
@@ -505,10 +548,65 @@ BOOL Initialize(PVOID BaseAddress)
     PVOID                   FaceBuffer;
     PLDR_MODULE             ExeModule;
     ED6_FC_HOOK_FUNCTIONS   Functions;
+    ED6HOOK_INFO*           ED6HookInfo = NULL;
+    ED6HOOK_EXE_INFO        ExeInfo;
+    ExeInfo.PeTimeDateStamp = 0;
 
     LdrDisableThreadCalloutsForDll(BaseAddress);
 
-    if (ImageNtHeaders(Ps::CurrentPeb()->ImageBaseAddress)->FileHeader.TimeDateStamp != 0x59A37AD3) {
+    HMODULE LoaderModule = GetModuleHandleA("dinput8");
+    FARPROC LoaderModuleInfoFunc = NULL;
+    if (LoaderModule)
+    	LoaderModuleInfoFunc = GetProcAddress(LoaderModule, "ed6_hook_get_info");
+    if (!LoaderModuleInfoFunc)
+    	LoaderModule = GetModuleHandleA("dsound");
+    if (LoaderModule && !LoaderModuleInfoFunc)
+    	LoaderModuleInfoFunc = GetProcAddress(LoaderModule, "ed6_hook_get_info");
+    if (LoaderModuleInfoFunc)
+    	ED6HookInfo = ((ED6HOOK_INFO* (*)(void))LoaderModuleInfoFunc)();
+
+    DWORD CurrentExeTimeDateStamp = ImageNtHeaders(Ps::CurrentPeb()->ImageBaseAddress)->FileHeader.TimeDateStamp;
+    HookInfo = NULL;
+    if (ED6HookInfo) {
+    	if (HookInfo)
+    		HookInfo = ED6HookInfo->HookInfo;
+
+	    for (DWORD i = 0; i < ED6HookInfo->ExeInfoNum; i += 1) {
+	    	if (ED6HookInfo->ExeInfo[i].PeTimeDateStamp == CurrentExeTimeDateStamp) {
+	    		memcpy(&ExeInfo, ED6HookInfo->ExeInfo + i, sizeof(ED6HOOK_EXE_INFO));
+	    		break;
+	    	}
+	    }
+    }
+    else
+    {
+    	fprintf(stderr, "Couldn't get hook info\n");
+    }
+
+    if (!ExeInfo.PeTimeDateStamp) {
+    	fprintf(stderr, "Couldn't find time date stamp 0x%x; reverting to built-in defaults\n", CurrentExeTimeDateStamp);
+	    ExeInfo.PeTimeDateStamp         = 0x59A37AD3;
+	    ExeInfo.GetGlyphsBitmapVa       =   0x4b8060;
+	    ExeInfo.DrawTalkTextVa          =   0x4868a0;
+	    ExeInfo.DrawDialogTextVa        =   0x4868f0;
+	    ExeInfo.LoadFileFromDatVa       =   0x4629e0;
+	    ExeInfo.DecompressDataVa        =   0x46a6b0;
+	    ExeInfo.WindowPosition1Addr     =   0x499280;
+	    ExeInfo.WindowPosition2Addr     =   0x49C790;
+	    ExeInfo.CombatStateAddr         =   0x43AF10;
+	    ExeInfo.JpFontSizeLimitAddr     =   0x4DD9B0;
+	    ExeInfo.HpEpFontSizeAddr        =   0x4773A0;
+	    ExeInfo.PlaceNameTextXDeltaAddr =   0x4B7ED0;
+    }
+
+    if (!HookInfo) {
+    	HookInfo = (ED6HOOK_HOOK_INFO *)malloc(sizeof(ED6HOOK_HOOK_INFO));
+    	HookInfo->GetGlyphsBitmap = GetGlyphsBitmap;
+    	HookInfo->DecompressData = DecompressData;
+    	HookInfo->LoadFileFromDat = LoadFileFromDat;
+    }
+
+    if (CurrentExeTimeDateStamp != ExeInfo.PeTimeDateStamp) {
         fprintf(stderr, "Incompatible timedatestamp 0x%x\n", ImageNtHeaders(Ps::CurrentPeb()->ImageBaseAddress)->FileHeader.TimeDateStamp);
         return TRUE;
     }
@@ -568,11 +666,11 @@ BOOL Initialize(PVOID BaseAddress)
     }
 
     //FAIL_RETURN(SearchFunctions(&Functions));
-    Functions.GetGlyphsBitmap = (PVOID)GET_GLYPHS_BITMAP_VA;
-    Functions.DrawTalkText = (PVOID)DRAW_TALK_TEXT_VA;
-    Functions.DrawDialogText = (PVOID)DRAW_DIALOG_TEXT_VA;
-    Functions.LoadFileFromDAT = (PVOID)LOAD_FILE_FROM_DAT_VA;
-    Functions.DecompressData = (PVOID)DECOMPRESS_DATA_VA;
+    Functions.GetGlyphsBitmap = (PVOID)ExeInfo.GetGlyphsBitmapVa;
+    Functions.DrawTalkText = (PVOID)ExeInfo.DrawTalkTextVa;
+    Functions.DrawDialogText = (PVOID)ExeInfo.DrawDialogTextVa;
+    Functions.LoadFileFromDAT = (PVOID)ExeInfo.LoadFileFromDatVa;
+    Functions.DecompressData = (PVOID)ExeInfo.DecompressDataVa;
 
     ExeModule = FindLdrModuleByHandle(nullptr);
 
@@ -831,28 +929,28 @@ BOOL Initialize(PVOID BaseAddress)
 
         // The item has a number of window positions
         //CWindow::CWindow(104, 14, ...)         // 4743A0
-        MemoryPatchVa(0x104ull, 4, WINDOW_POSITION_1_ADDR + 0x10B + 0x4),  // x
-        MemoryPatchVa(0x14ull,  4, WINDOW_POSITION_1_ADDR + 0x11F + 0x4),  // width
-        MemoryPatchVa(0x104ull, 4, WINDOW_POSITION_2_ADDR + 0x28 + 0x4),  // x
-        MemoryPatchVa(0x14ull,  4, WINDOW_POSITION_2_ADDR + 0x3C + 0x4),  // width
+        MemoryPatchVa(0x104ull, 4, ExeInfo.WindowPosition1Addr + 0x10B + 0x4),  // x
+        MemoryPatchVa(0x14ull,  4, ExeInfo.WindowPosition1Addr + 0x11F + 0x4),  // width
+        MemoryPatchVa(0x104ull, 4, ExeInfo.WindowPosition2Addr + 0x28 + 0x4),  // x
+        MemoryPatchVa(0x14ull,  4, ExeInfo.WindowPosition2Addr + 0x3C + 0x4),  // width
 
         // Combat state
-        MemoryPatchVa(0xC98B0000003Eull,  6, COMBAT_STATE_ADDR + 0x128 + 0x1),  // hp fixed x
+        MemoryPatchVa(0xC98B0000003Eull,  6, ExeInfo.CombatStateAddr + 0x128 + 0x1),  // hp fixed x
 
         // char type switch table
 //referenced by 0x486DF0+19
         MemoryPatchVa(0x0404ull,    2, 0x486EBC),
 
         // jp font size limit
-        MemoryPatchVa(0xEBull,      1, JP_FONT_SIZE_LIMIT_ADDR + 0x2A4),
+        MemoryPatchVa(0xEBull,      1, ExeInfo.JpFontSizeLimitAddr + 0x2A4),
 
         // HP EP font size
-        MemoryPatchVa(0x02ull,      1, HP_EP_FONT_SIZE_ADDR + 0x72A + 0x1),
+        MemoryPatchVa(0x02ull,      1, ExeInfo.HpEpFontSizeAddr + 0x72A + 0x1),
 
         // place name text X delta
-        MemoryPatchVa((ULONG64)&DefaultPlaceNameTextDeltaX,      4, PLACE_NAME_TEXT_X_DELTA_ADDR + 0x3F + 0x2),
+        MemoryPatchVa((ULONG64)&DefaultPlaceNameTextDeltaX,      4, ExeInfo.PlaceNameTextXDeltaAddr + 0x3F + 0x2),
 
-        FunctionJumpVa(Success ? Functions.GetGlyphsBitmap       : IMAGE_INVALID_VA, GetGlyphsBitmap, &StubGetGlyphsBitmap),
+        FunctionJumpVa(Success ? Functions.GetGlyphsBitmap       : IMAGE_INVALID_VA, GetGlyphsBitmap),
         FunctionJumpVa(Success ? Functions.DrawTalkText          : IMAGE_INVALID_VA, DrawTalkText),
         FunctionJumpVa(Success ? Functions.DrawDialogText        : IMAGE_INVALID_VA, NakedDrawDialogText),
 
