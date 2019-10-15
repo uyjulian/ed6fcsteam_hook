@@ -89,7 +89,7 @@ BOOL GetGlyphBitmap(LONG_PTR FontSize, WCHAR Chr, PVOID& Buffer, ULONG ColorInde
     Color = FontColorTable[ColorIndex];
 
     FT_Load_Glyph(Face, FT_Get_Char_Index(Face, Chr), FT_LOAD_DEFAULT | FT_LOAD_NO_BITMAP | FT_LOAD_FORCE_AUTOHINT | FT_LOAD_RENDER);
-    //FT_Bitmap_Embolden(FTLibrary, &Face->glyph->bitmap, 0, strenth);
+    FT_Bitmap_Embolden(FTLibrary, &Face->glyph->bitmap, 6, 0);
     FT_Render_Glyph(Face->glyph, FT_RENDER_MODE_NORMAL);
     FT_Get_Glyph(Face->glyph, &glyph);
     FT_Glyph_To_Bitmap(&glyph, FT_RENDER_MODE_NORMAL, nullptr, TRUE);
@@ -102,7 +102,7 @@ BOOL GetGlyphBitmap(LONG_PTR FontSize, WCHAR Chr, PVOID& Buffer, ULONG ColorInde
         PBYTE LocalOutline = (PBYTE) malloc((FontSize * FontSize) * 2);
         memset(LocalOutline, 0, (FontSize * FontSize) * 2);
 
-        Outline = LocalOutline + bitmap->left + (FontSize - MIN(FontSize, bitmap->top + 3)) * FontSize;
+        Outline = LocalOutline + bitmap->left + (FontSize - MIN(FontSize, bitmap->top + 8)) * FontSize;
 
         for (ULONG_PTR Height = bitmap->bitmap.rows; Height; --Height)
         {
@@ -167,7 +167,15 @@ PVOID NTAPI GetGlyphsBitmap(PCSTR Text, PVOID Buffer, ULONG Stride, ULONG ColorI
     fontSize    = FontSizeTable[fontIndex];
     color       = FontColorTable[ColorIndex];
 
-    FT_Set_Pixel_Sizes(Face, fontSize, fontSize);
+    FT_Size_RequestRec request;
+    request.type = FT_SIZE_REQUEST_TYPE_REAL_DIM;
+    request.width = (fontSize * 64) * 15 / 20;
+    request.height = fontSize * 64;
+    request.horiResolution = 0;
+    request.vertResolution = 0;
+
+    FT_Request_Size(Face, &request);
+    // FT_Set_Pixel_Sizes(Face, (fontSize * 15 / 20) - 2, fontSize - 2);
 
     int nLen = MultiByteToWideChar(Encoding, 0, Text, -1, NULL, NULL);
     LPWSTR wText = (LPWSTR) malloc(nLen * sizeof(WCHAR));
