@@ -1,6 +1,7 @@
 
 FILES := ed6fc_all.o 
 
+# Unpack https://mega.nz/file/FhpUSKAQ#Fs03NEg0-taQDiG5spYgWtvkzIyXqxXHuDmirVCbYxY to get the following layout:
 export WINEPREFIX := $(HOME)/.winedev
 PROGRAMFILES := c:/Program Files
 WSDK := $(PROGRAMFILES)/Microsoft Visual Studio 10.0
